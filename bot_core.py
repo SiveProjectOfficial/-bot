@@ -25,7 +25,7 @@ def make_markov_text(source_text):
     try:
         current_key = random.choice(list(markov.keys()))
         result_words = list(current_key)
-        for _ in range(20): # 20単語くらい繋げる
+        for _ in range(20): # 10単語くらい繋げる
             if current_key in markov:
                 next_word = random.choice(markov[current_key])
                 result_words.append(next_word)
