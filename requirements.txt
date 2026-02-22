@@ -1,3 +1,5 @@
 tweepy
 flask
 google-api-python-client
+requests
+beautifulsoup4
