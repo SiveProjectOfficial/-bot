@@ -56,7 +56,7 @@ def sine_wave_bot():
     while True:
         now = datetime.now(jp_tz)
         # ★8時から23時（22時台まで）の勤務時間
-        if 8 <= now.hour < 23:
+        if 8 <= now.hour < if true:
             post_text = run_chappy_shortcut()
             if post_text:
                 try:
