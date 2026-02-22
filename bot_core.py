@@ -9,12 +9,9 @@ def get_wiki_material():
         with open("Word.txt", "r", encoding="utf-8") as f:
             return f.read()
     except:
-        # 正弦波くんの名前やテトさんは抜いて、バックアップもクリーンに！
         return "楽曲制作 物理演算 エディタ ノート 歌声合成 エンジン wavファイル ツール"
 
 def make_markov_text(source_text):
-    # ★ここを修正！ ひらがな、カタカナ、漢字、英数字を1文字から全部拾うようにしたよ！
-    # これで「を」や「が」も全部マルコフ連鎖の材料になる！！
     words = re.findall(r'[ぁ-ん]|[ァ-ヶー]|[一-龠]+|[a-zA-Z0-9]+', source_text)
     
     if len(words) < 10: return "波が静かだ"
@@ -28,13 +25,16 @@ def make_markov_text(source_text):
     try:
         curr = random.choice(list(markov.keys()))
         res = list(curr)
-        # 文の長さもイーロンに怒られない程度（15〜20語くらい）に調整
         for _ in range(18):
             if curr in markov:
                 nxt = random.choice(markov[curr])
                 res.append(nxt)
                 curr = (res[-2], res[-1])
             else: break
+        # ★ここ！余計な語尾を消して、純粋に繋がった文字だけを返すよ
+        return "".join(res)
+    except:
+        return "不思議な波"
 
 def sine_wave_bot():
     client = tweepy.Client(
@@ -47,7 +47,7 @@ def sine_wave_bot():
     while True:
         material = get_wiki_material()
         txt = make_markov_text(material)
-        post = txt if txt else "波が静かだ……っ！"
+        post = txt if txt else "波が静かだ"
         
         try:
             client.create_tweet(text=post)
@@ -58,9 +58,11 @@ def sine_wave_bot():
         time.sleep(3600)
 
 @app.route('/')
-def home(): return "正弦波くん、日本語文法（カオス）モード……っ！"
+def home(): 
+    return "正弦波くん、カオス純度100%モード"
 
 if __name__ == "__main__":
     t = threading.Thread(target=sine_wave_bot)
+    t.setDaemon(True)
     t.start()
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
