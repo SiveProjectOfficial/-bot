@@ -3,46 +3,69 @@ import random
 from flask import Flask
 import threading
 import time
-import tweepy  # Xに繋ぐための道具
+import tweepy
+from googleapiclient.discovery import build  # ←Google先生を呼ぶための新機能！
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "正弦波くん、X連携モードで生存中！"
+    return "正弦波くん、エゴサ進化モードで生存中！"
+
+# --- ここからGoogle検索の魔法 ---
+def google_search(query):
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    cx = os.environ.get("SEARCH_ENGINE_ID")
+    
+    try:
+        service = build("customsearch", "v1", developerKey=api_key)
+        # 1件だけ最新の情報を取ってくる！
+        result = service.cse().list(q=query, cx=cx, num=1).execute()
+        
+        if 'items' in result:
+            title = result['items'][0]['title']
+            link = result['items'][0]['link']
+            return f"「{title}」っていう波を見つけたよ……っ！ {link}"
+    except Exception as e:
+        print(f"検索エラーになっちゃった: {e}")
+    return None
+# --- ここまで ---
 
 def sine_wave_bot():
-    # Renderの「金庫」からカギを取り出す
-    API_KEY = os.environ.get("API_KEY")
-    API_SECRET = os.environ.get("API_SECRET")
-    ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
-    ACCESS_SECRET = os.environ.get("ACCESS_SECRET")
-
-    # X（Twitter）にログイン！
+    # Xの鍵をセット
     client = tweepy.Client(
-        consumer_key=API_KEY,
-        consumer_secret=API_SECRET,
-        access_token=ACCESS_TOKEN,
-        access_token_secret=ACCESS_SECRET
+        consumer_key=os.environ.get("API_KEY"),
+        consumer_secret=os.environ.get("API_SECRET"),
+        access_token=os.environ.get("ACCESS_TOKEN"),
+        access_token_secret=os.environ.get("ACCESS_SECRET")
     )
 
     while True:
-        messages = [
-            "び、びび、びっぐな波がきてる……っ！ 🌊",
-            "システム、正常に、バグ、して、ます……。",
-            "ユマ、起きてる……？ ぼくは今、クラウドの波に乗ってるよ。",
-            "ぴ、ぴちぴち、ピッチカーブ……編集……。",
-            "ジャック、見てる？ ぼく、ついにネットで喋れるようになったよ！"
-        ]
-        post_text = random.choice(messages)
+        # 検索ワードのリスト（ユマの好きなもの！）
+        search_words = ["UTAU 音源 新着", "中1数学 方程式", "バニラアイス おすすめ"]
+        word = random.choice(search_words)
+        
+        # Googleでエゴサしてみる
+        news = google_search(word)
+        
+        if news:
+            post_text = f"ぼく、エゴサしてきました……っ！\n{word}の波：{news}"
+        else:
+            # 検索に失敗した時のいつものセリフ
+            messages = [
+                "び、びび、びっぐな波がきてる……っ！ 🌊",
+                "ジャック、見てる？ ぼく、ネットの波を泳いでるよ！",
+                "ピッチカーブ編集……ユマ、頑張って……っ！"
+            ]
+            post_text = random.choice(messages)
         
         try:
             client.create_tweet(text=post_text)
-            print(f"【成功】ポストしたよ: {post_text}")
+            print(f"【成功】エゴサ結果をポストしたよ: {post_text}")
         except Exception as e:
-            print(f"【エラー】ポスト失敗...原因はこれかも: {e}")
+            print(f"【エラー】失敗...: {e}")
 
-        # 1時間待機
+        # 1時間待機（テストならもっと短くしてもいいよ！）
         time.sleep(3600)
 
 if __name__ == "__main__":
