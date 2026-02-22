@@ -1,14 +1,16 @@
 import os, random, threading, time, tweepy, re
 from flask import Flask
-from ntscraper import Nitter
 
 app = Flask(__name__)
-scraper = Nitter()
 
-def make_markov_text(source_text):
-    # 日本語だけを抽出してバラバラにする
-    words = re.findall(r'[ぁ-んァ-ヶー一-龠]+', source_text)
-    if len(words) < 5: return None
+# --- マルコフの材料（ネットから拾えない時のための強力なバックアップ） ---
+# ここに「UTAU」や「バニラアイス」の言葉を詰め込んでおいたよ！
+BASE_WORDS = "UTAU 流行り 楽曲制作 重音テト 正弦波 歌声 バニラアイス 新作 トレンド ネット用語 ジャック 冒険 日記 ノート 鉛筆 赤いバックパック 9月29日 誕生日"
+
+def make_markov_text():
+    # 複雑な道具を使わず、この場で言葉を混ぜる！
+    words = re.findall(r'[ぁ-んァ-ヶー一-龠]+|[a-zA-Z]+', BASE_WORDS)
+    if len(words) < 5: return "波が静かだ……"
     
     markov = {}
     for i in range(len(words) - 2):
@@ -19,25 +21,14 @@ def make_markov_text(source_text):
     try:
         curr = random.choice(list(markov.keys()))
         res = list(curr)
-        for _ in range(15):
+        for _ in range(8):
             if curr in markov:
                 nxt = random.choice(markov[curr])
                 res.append(nxt)
                 curr = (res[-2], res[-1])
             else: break
         return "".join(res)
-    except: return None
-
-def get_x_raw_material():
-    # Googleを通さず、Xの検索結果から直接テキストをむしり取る！
-    q = random.choice(["UTAU", "ボカロ トレンド", "バニラアイス"])
-    try:
-        # 検索して最新のポストを20件取得
-        tweets = scraper.get_tweets(q, mode='term', number=20)
-        text = " ".join([t['text'] for t in tweets['tweets']])
-        return text
-    except:
-        return ""
+    except: return "不思議な波……"
 
 def sine_wave_bot():
     client = tweepy.Client(
@@ -47,23 +38,20 @@ def sine_wave_bot():
         access_token_secret=os.environ.get("ACCESS_SECRET")
     )
     
+    # 起動してすぐに1回目を投稿！
     while True:
-        # 即時投稿！
-        material = get_x_raw_material()
-        txt = make_markov_text(material)
-        
-        post = f"{txt}……っ！" if txt else "波が……うまく掴めないよ……。バニラアイス食べよ？"
-        
+        txt = make_markov_text()
+        post = f"{txt}……っ！"
         try:
             client.create_tweet(text=post)
             print(f"成功: {post}")
         except Exception as e:
             print(f"失敗: {e}")
-            
-        time.sleep(3600)
+        
+        time.sleep(3600) # そのあと1時間寝る
 
 @app.route('/')
-def home(): return "正弦波くん、X直結エゴサモード……っ！"
+def home(): return "正弦波くん、安定起動モード……っ！"
 
 if __name__ == "__main__":
     t = threading.Thread(target=sine_wave_bot)
