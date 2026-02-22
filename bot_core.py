@@ -1,17 +1,32 @@
-import os, random, threading, time, tweepy, re
+import os, random, threading, time, tweepy, re, requests
 from flask import Flask
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# --- マルコフの材料（ネットから拾えない時のための強力なバックアップ） ---
-# ここに「UTAU」や「バニラアイス」の言葉を詰め込んでおいたよ！
-BASE_WORDS = "UTAU 流行り 楽曲制作 重音テト  バニラアイス 新作 トレンド 音源"
+def get_wiki_material():
+    # UTAUのWikiから言葉をさらってくるよ！
+    urls = [
+        "https://w.atwiki.jp/utau2008/", 
+        "https://w.atwiki.jp/utau2008/pages/15.html" # 初心者向けページとか
+    ]
+    try:
+        url = random.choice(urls)
+        res = requests.get(url, timeout=10)
+        res.encoding = res.apparent_encoding
+        soup = BeautifulSoup(res.text, 'html.parser')
+        # Wikiの本文っぽいところからテキストを抽出
+        return soup.get_text()
+    except:
+        # 万が一Wikiが見れない時のための予備の波
+        return "UTAU 楽曲制作 重音テト 正弦波 歌声 バニラアイス 新作 トレンド"
 
-def make_markov_text():
-    # 複雑な道具を使わず、この場で言葉を混ぜる！
-    words = re.findall(r'[ぁ-んァ-ヶー一-龠]+|[a-zA-Z]+', BASE_WORDS)
-    if len(words) < 5: return "波が静かだ……"
-    
+def make_markov_text(source_text):
+    # Wikiから拾った言葉をバラバラにする
+    words = re.findall(r'[ぁ-んァ-ヶー一-龠]+|[a-zA-Z]+', source_text)
+    if len(words) < 10: 
+        words = re.findall(r'[ぁ-んァ-ヶー一-龠]+|[a-zA-Z]+', "UTAU 楽曲制作 重音テト 正弦波 バニラアイス")
+
     markov = {}
     for i in range(len(words) - 2):
         key = (words[i], words[i+1])
@@ -21,14 +36,15 @@ def make_markov_text():
     try:
         curr = random.choice(list(markov.keys()))
         res = list(curr)
-        for _ in range(8):
+        for _ in range(15): # 少し長めに喋るようにしたよ
             if curr in markov:
                 nxt = random.choice(markov[curr])
                 res.append(nxt)
                 curr = (res[-2], res[-1])
             else: break
         return "".join(res)
-    except: return "不思議な波……"
+    except:
+        return "波の音が聞こえる"
 
 def sine_wave_bot():
     client = tweepy.Client(
@@ -38,20 +54,24 @@ def sine_wave_bot():
         access_token_secret=os.environ.get("ACCESS_SECRET")
     )
     
-    # 起動してすぐに1回目を投稿！
     while True:
-        txt = make_markov_text()
-        post = f"{txt}……っ！"
+        # Wikiから材料をゲットして、マルコフで混ぜる
+        material = get_wiki_material()
+        txt = make_markov_text(material)
+        
+        # 語尾の「……っ！」を削除！
+        post = txt if txt else "波が静かだ……"
+        
         try:
             client.create_tweet(text=post)
             print(f"成功: {post}")
         except Exception as e:
             print(f"失敗: {e}")
-        
-        time.sleep(3600) # そのあと1時間寝る
+            
+        time.sleep(3600)
 
 @app.route('/')
-def home(): return "正弦波くん、安定起動モード……っ！"
+def home(): return "正弦波くん、Wiki泥棒モード起動中……っ！" # ここは管理用だから残しとくねｗ
 
 if __name__ == "__main__":
     t = threading.Thread(target=sine_wave_bot)
