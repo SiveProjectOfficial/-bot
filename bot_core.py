@@ -5,12 +5,10 @@ from bs4 import BeautifulSoup
 app = Flask(__name__)
 
 def get_wiki_material():
-    urls = ["https://w.atwiki.jp/utau2008/", "https://w.atwiki.jp/utau2008/pages/15.html"]
+    # ★ここだけ書き換えたよ！Wikiに行かずに身内のファイルを読み取る
     try:
-        url = random.choice(urls)
-        res = requests.get(url, timeout=10)
-        res.encoding = res.apparent_encoding
-        return BeautifulSoup(res.text, 'html.parser').get_text()
+        with open("Word.txt", "r", encoding="utf-8") as f:
+            return f.read()
     except:
         return "UTAU 楽曲制作 重音テト 正弦波 歌声 バニラアイス"
 
