@@ -1,5 +1,4 @@
-tweepy
 flask
-google-api-python-client
-requests
+tweepy
 beautifulsoup4
+requests
