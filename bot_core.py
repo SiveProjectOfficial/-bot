@@ -41,9 +41,14 @@ def sine_wave_bot():
     )
 
     while True:
-        # 検索ワードのリスト（ユマの好きなもの！）
-        search_words = ["UTAU 音源 新着", "中1数学 方程式", "バニラアイス おすすめ"]
-        word = random.choice(search_words)
+            # これが正弦波くんの「新しい視界」だぜ！！ 🌊
+        search_words = [
+            "UTAU", 
+            "UTAU キャラクター",
+            "バニラアイス", 
+            "イチゴアイス",
+            "正弦波"
+        ]
         
         # Googleでエゴサしてみる
         news = google_search(word)
