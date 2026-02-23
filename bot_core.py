@@ -3,21 +3,18 @@ from bs4 import BeautifulSoup
 import random
 import re
 import time
-import json
-import os
+import tweepy
 from datetime import datetime
+import os
 import sys
-import tweepy # ここでtweepyを使うよ
 
-# --- ① X (Twitter) API設定 ---
-# X Developer Portalで取得したキーをここに入れてね
-API_KEY = "YOUR_API_KEY"
-API_SECRET = "YOUR_API_SECRET"
-ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"
-ACCESS_SECRET = "YOUR_ACCESS_SECRET"
-BEARER_TOKEN = "YOUR_BEARER_TOKEN"
+# --- ① X API設定（RenderのEnv Vars推奨） ---
+API_KEY = os.environ.get("API_KEY", "YOUR_API_KEY")
+API_SECRET = os.environ.get("API_SECRET", "YOUR_API_SECRET")
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN", "YOUR_ACCESS_TOKEN")
+ACCESS_SECRET = os.environ.get("ACCESS_SECRET", "YOUR_ACCESS_SECRET")
+BEARER_TOKEN = os.environ.get("BEARER_TOKEN", "YOUR_BEARER_TOKEN")
 
-# クライアント認証
 def get_twitter_client():
     return tweepy.Client(
         bearer_token=BEARER_TOKEN,
@@ -27,44 +24,59 @@ def get_twitter_client():
         access_token_secret=ACCESS_SECRET
     )
 
-# --- ② エサ場 & 設定 ---
-TARGET_URLS = [
-    "https://dic.nicovideo.jp/a/utau",
-    "https://dic.nicovideo.jp/a/重音テト",
-    "https://dic.nicovideo.jp/a/足立レイ",
-    "https://dic.nicovideo.jp/a/初音ミク",
-    "https://dic.nicovideo.jp/a/voicevox",
-    "https://dic.nicovideo.jp/a/ずんだもん"
-]
-SKELETON_WORDS = ["の", "が", "を", "に", "だよ", "です", "だね", "なのだ", "よー！", "だわ"]
-CACHE_FILE = "brain_cache.json"
+# --- ② 検索エサ場取得（Google検索風） ---
+def fetch_search_seeds():
+    queries = ["ニコニコ 話題", "ボカロ トレンド", "UTAU 新曲", "足立レイ 開発", "重音テト 最新"]
+    headers = {"User-Agent": "Mozilla/5.0"}
+    search_texts = ""
+    
+    for q in queries:
+        try:
+            # Google検索結果を簡易的にスクレイピング
+            url = f"https://www.google.com/search?q={q}"
+            res = requests.get(url, headers=headers, timeout=5)
+            soup = BeautifulSoup(res.text, 'html.parser')
+            # 検索結果のスニペット（説明文）を抽出
+            for g in soup.find_all('div'):
+                t = g.get_text()
+                if len(t) > 20: search_texts += " " + t
+        except: continue
+    return search_texts
 
 # --- ③ 脳みそ構築ロジック ---
-def build_safe_pure_brain(urls, skeleton):
-    BAN_LIST = [
-        "ケツ", "オチンポ", "かゆい", "エロ", "スケベ", "絶望", "敗北", "死ん", "殺す",
-        "小山乃舞世", "声優", "CV", "演者", "担当", "絵師", "イラストレーター", "作者", "開発者", 
-        "出演", "ゲスト", "地上波", "放送", "番組", "スクラッチ", "景品", "販売", "購入", "円",
-        "プレミアム会員", "エラー", "再試行", "スレッド", "レス", "努めてください", "ほんわか",
-        "掲示板", "脚注", "関連項目", "編集", "作成", "ログイン", "パスワード", "ページ番号",
-        "Google", "Chrome", "トヨタ", "ルイヴィトン", "日清", "案件", "広告", "宣伝", 
-        "ショップ", "カフェ", "公式応援", "就任"
+def build_pure_brain():
+    # 既存のエサ場
+    TARGET_URLS = [
+        "https://dic.nicovideo.jp/a/utau", "https://dic.nicovideo.jp/a/重音テト",
+        "https://dic.nicovideo.jp/a/足立レイ", "https://dic.nicovideo.jp/a/初音ミク",
+        "https://dic.nicovideo.jp/a/voicevox", "https://dic.nicovideo.jp/a/ずんだもん"
     ]
-    combined_text = " ".join(skeleton)
-    for url in urls:
+    BAN_LIST = [
+        "小山乃舞世", "声優", "CV", "演者", "担当", "絵師", "作者", "開発者", "出演", 
+        "放送", "番組", "円", "エラー", "掲示板", "Google", "広告", "ログイン", "パスワード",
+        "Amazon", "楽天", "価格", "セール", "在庫" # 検索結果に入りがちなゴミを追加
+    ]
+    
+    combined_text = "の が を に だよ です だね なのだ よー！ だわ"
+    
+    # 大百科からの学習
+    for url in TARGET_URLS:
         try:
-            print(f"Feeding: {url.split('/')[-1]}...", flush=True)
             res = requests.get(url, timeout=5)
             res.encoding = res.apparent_encoding
             soup = BeautifulSoup(res.text, 'html.parser')
-            text = soup.get_text()
-            for l in text.split('\n'):
+            for l in soup.get_text().split('\n'):
                 l = l.strip()
                 if 10 < len(l) < 100 and not any(bad in l for bad in BAN_LIST):
-                    clean_l = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', l)
-                    clean_l = re.sub(r'[【】［］\[\]「」『』()（）]', '', clean_l)
+                    clean_l = re.sub(r'[【】［］\[\]「」『』()（）]', '', l)
                     combined_text += " " + clean_l
         except: continue
+    
+    # ★最新検索結果からの学習を追加！
+    print("Fetching search results for fresh news...", flush=True)
+    combined_text += " " + fetch_search_seeds()
+    
+    # トークン化とマルコフ連鎖
     tokens = re.findall(r'[一-龠]+|[ぁ-ん]+|[ァ-ヶー]+|[a-zA-Z0-9]+', combined_text)
     chain = {}
     for i in range(len(tokens) - 2):
@@ -73,18 +85,7 @@ def build_safe_pure_brain(urls, skeleton):
         chain[key].append(tokens[i+2])
     return chain
 
-def get_brain():
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return {tuple(eval(k)): v for k, v in data.items()}
-    else:
-        new_brain = build_safe_pure_brain(TARGET_URLS, SKELETON_WORDS)
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump({str(list(k)): v for k, v in new_brain.items()}, f, ensure_ascii=False)
-        return new_brain
-
-def generate_safe_bug(brain):
+def generate_tweet(brain):
     starts = ["僕は", "正弦波は", "テトさんは", "ミクさんは", "レイちゃんは", "0と1は"]
     w1 = random.choice(starts)
     candidates = [k[1] for k in brain.keys() if k[0] in [w1.replace("は",""), "は"]]
@@ -100,29 +101,30 @@ def generate_safe_bug(brain):
             new_key = random.choice(list(brain.keys()))
             sentence += new_key[0]
             w1_curr, w2_curr = new_key
-        if i > 12 and any(end in sentence for end in ["だよ", "です", "だね", "なのだ", "！", "。"]):
-            break
+        if i > 12 and any(end in sentence for end in ["！", "。"]): break
     return sentence[:140]
 
-# --- ④ メイン実行ループ ---
-brain = get_brain()
+# --- ④ メインループ ---
+# Renderはファイル永続化が難しいので、起動時に毎回脳を作る
+print("Building brain with search integration...", flush=True)
+brain = build_pure_brain()
 client = get_twitter_client()
 
-print("\n--- 正弦波くんOS：X連携モード稼働 ---", flush=True)
+print("--- 正弦波くんOS：本番稼働開始 ---", flush=True)
 
 while True:
     now = datetime.now()
-    # 8時から23時までの間かチェック
+    # 8時から23時（JSTを想定）
     if 8 <= now.hour <= 23:
         try:
-            tweet_text = generate_safe_bug(brain)
-            client.create_tweet(text=tweet_text) # ここで投稿！
-            print(f"[{now.strftime('%H:%M')}] 投稿成功: {tweet_text}", flush=True)
+            text = generate_tweet(brain)
+            client.create_tweet(text=text)
+            print(f"[{now.strftime('%H:%M')}] Posted: {text}", flush=True)
         except Exception as e:
-            print(f"[{now.strftime('%H:%M')}] 投稿エラー: {e}", flush=True)
+            print(f"Error: {e}", flush=True)
         
-        # 1時間待機
+        # 次の投稿まで1時間待機
         time.sleep(3600)
     else:
-        print(f"[{now.strftime('%H:%M')}] スリープ中...", flush=True)
+        # 夜間は10分ごとにチェック
         time.sleep(600)
