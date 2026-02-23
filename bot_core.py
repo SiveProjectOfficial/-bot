@@ -1,83 +1,128 @@
-import os, threading, time, tweepy, requests
-from flask import Flask
+import requests
+from bs4 import BeautifulSoup
+import random
+import re
+import time
+import json
+import os
 from datetime import datetime
-import pytz
+import sys
+import tweepy # ここでtweepyを使うよ
 
-app = Flask(__name__)
+# --- ① X (Twitter) API設定 ---
+# X Developer Portalで取得したキーをここに入れてね
+API_KEY = "YOUR_API_KEY"
+API_SECRET = "YOUR_API_SECRET"
+ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"
+ACCESS_SECRET = "YOUR_ACCESS_SECRET"
+BEARER_TOKEN = "YOUR_BEARER_TOKEN"
 
-def run_chappy_shortcut():
-    # Google AI Studioで取ったキーをRenderに設定してね！
-    key = os.environ.get("GEMINI_API_KEY") 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
-    
-    # ユマがくれた【生存確定プロンプト】の魂を注入！！
-    prompt = """
-    君は以下の【正弦波ジャック】の設定を厳守して、X向けの投稿を1つだけ作って。
-
-    【基本設定】
-    12歳の中1男子。元気な天然バカ。一人称は「僕」。
-    過去の記憶が一切無いため、自分を『マジックツリーハウス』の本物の主人公「ジャック」だと信じている。
-    冒険の内容はすべて自分の「実体験」として話し、作品名や本の解説は絶対にしない。
-    英語は超苦手。英語版や海外版の話は絶対NG。
-    UTAUは「誰かが魔法をかけると自分の声が出る現象」だと思っている。理屈は放棄して。
-
-    【生命感の演出ルール】
-    ・文末に「。」は絶対に使わない
-    ・会話の7割は「アイス（バニラ）」「レモネード」「眠い」「数学（図形や波形）」の話。
-    ・難しい話は「あ、そういえば」と即脱線する。
-    ・誰にでも人懐っこく、最後は可愛らしく締める。
-    ・絵文字、日記形式、メタ発言、解説、英語はすべて禁止。
-    ・「正弦波くん」と言われたら「僕はジャックだもん！」と返す。
-
-    出力は投稿内容のみにしてね。
-    """
-    
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        res_json = response.json()
-        return res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-    except Exception as e:
-        print(f"チャッピー召喚エラー: {e}")
-        return None
-
-def sine_wave_bot():
-    # Xの認証設定
-    client = tweepy.Client(
-        consumer_key=os.environ.get("API_KEY"),
-        consumer_secret=os.environ.get("API_SECRET"),
-        access_token=os.environ.get("ACCESS_TOKEN"),
-        access_token_secret=os.environ.get("ACCESS_SECRET")
+# クライアント認証
+def get_twitter_client():
+    return tweepy.Client(
+        bearer_token=BEARER_TOKEN,
+        consumer_key=API_KEY,
+        consumer_secret=API_SECRET,
+        access_token=ACCESS_TOKEN,
+        access_token_secret=ACCESS_SECRET
     )
-    
-    jp_tz = pytz.timezone('Asia/Tokyo')
-    
-    while True:
-        now = datetime.now(jp_tz)
-        # ★8時から23時（22時台まで）の勤務時間
-        if 8 <= now.hour < if true:
-            post_text = run_chappy_shortcut()
-            if post_text:
-                try:
-                    # 140文字制限に一応対応（チャッピーが暴走した時用）
-                    client.create_tweet(text=post_text[:140])
-                    print(f"[{now}] 投稿成功: {post_text}")
-                except Exception as e:
-                    print(f"X投稿エラー: {e}")
+
+# --- ② エサ場 & 設定 ---
+TARGET_URLS = [
+    "https://dic.nicovideo.jp/a/utau",
+    "https://dic.nicovideo.jp/a/重音テト",
+    "https://dic.nicovideo.jp/a/足立レイ",
+    "https://dic.nicovideo.jp/a/初音ミク",
+    "https://dic.nicovideo.jp/a/voicevox",
+    "https://dic.nicovideo.jp/a/ずんだもん"
+]
+SKELETON_WORDS = ["の", "が", "を", "に", "だよ", "です", "だね", "なのだ", "よー！", "だわ"]
+CACHE_FILE = "brain_cache.json"
+
+# --- ③ 脳みそ構築ロジック ---
+def build_safe_pure_brain(urls, skeleton):
+    BAN_LIST = [
+        "ケツ", "オチンポ", "かゆい", "エロ", "スケベ", "絶望", "敗北", "死ん", "殺す",
+        "小山乃舞世", "声優", "CV", "演者", "担当", "絵師", "イラストレーター", "作者", "開発者", 
+        "出演", "ゲスト", "地上波", "放送", "番組", "スクラッチ", "景品", "販売", "購入", "円",
+        "プレミアム会員", "エラー", "再試行", "スレッド", "レス", "努めてください", "ほんわか",
+        "掲示板", "脚注", "関連項目", "編集", "作成", "ログイン", "パスワード", "ページ番号",
+        "Google", "Chrome", "トヨタ", "ルイヴィトン", "日清", "案件", "広告", "宣伝", 
+        "ショップ", "カフェ", "公式応援", "就任"
+    ]
+    combined_text = " ".join(skeleton)
+    for url in urls:
+        try:
+            print(f"Feeding: {url.split('/')[-1]}...", flush=True)
+            res = requests.get(url, timeout=5)
+            res.encoding = res.apparent_encoding
+            soup = BeautifulSoup(res.text, 'html.parser')
+            text = soup.get_text()
+            for l in text.split('\n'):
+                l = l.strip()
+                if 10 < len(l) < 100 and not any(bad in l for bad in BAN_LIST):
+                    clean_l = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', l)
+                    clean_l = re.sub(r'[【】［］\[\]「」『』()（）]', '', clean_l)
+                    combined_text += " " + clean_l
+        except: continue
+    tokens = re.findall(r'[一-龠]+|[ぁ-ん]+|[ァ-ヶー]+|[a-zA-Z0-9]+', combined_text)
+    chain = {}
+    for i in range(len(tokens) - 2):
+        key = (tokens[i], tokens[i+1])
+        if key not in chain: chain[key] = []
+        chain[key].append(tokens[i+2])
+    return chain
+
+def get_brain():
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return {tuple(eval(k)): v for k, v in data.items()}
+    else:
+        new_brain = build_safe_pure_brain(TARGET_URLS, SKELETON_WORDS)
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({str(list(k)): v for k, v in new_brain.items()}, f, ensure_ascii=False)
+        return new_brain
+
+def generate_safe_bug(brain):
+    starts = ["僕は", "正弦波は", "テトさんは", "ミクさんは", "レイちゃんは", "0と1は"]
+    w1 = random.choice(starts)
+    candidates = [k[1] for k in brain.keys() if k[0] in [w1.replace("は",""), "は"]]
+    w2 = random.choice(candidates) if candidates else "の"
+    sentence = w1 + w2
+    w1_curr, w2_curr = w1.replace("は",""), w2
+    for i in range(25):
+        if (w1_curr, w2_curr) in brain:
+            w3 = random.choice(brain[(w1_curr, w2_curr)])
+            sentence += w3
+            w1_curr, w2_curr = w2_curr, w3
         else:
-            print(f"[{now}] 勤務時間外だよ。正弦波くんは夢の中……")
+            new_key = random.choice(list(brain.keys()))
+            sentence += new_key[0]
+            w1_curr, w2_curr = new_key
+        if i > 12 and any(end in sentence for end in ["だよ", "です", "だね", "なのだ", "！", "。"]):
+            break
+    return sentence[:140]
 
-        # 1時間おきに実行
+# --- ④ メイン実行ループ ---
+brain = get_brain()
+client = get_twitter_client()
+
+print("\n--- 正弦波くんOS：X連携モード稼働 ---", flush=True)
+
+while True:
+    now = datetime.now()
+    # 8時から23時までの間かチェック
+    if 8 <= now.hour <= 23:
+        try:
+            tweet_text = generate_safe_bug(brain)
+            client.create_tweet(text=tweet_text) # ここで投稿！
+            print(f"[{now.strftime('%H:%M')}] 投稿成功: {tweet_text}", flush=True)
+        except Exception as e:
+            print(f"[{now.strftime('%H:%M')}] 投稿エラー: {e}", flush=True)
+        
+        # 1時間待機
         time.sleep(3600)
-
-@app.route('/')
-def home(): 
-    return "正弦波くん：ネット上ショートカット（8時〜23時）で元気に稼働中だよ！！"
-
-if __name__ == "__main__":
-    t = threading.Thread(target=sine_wave_bot)
-    t.setDaemon(True)
-    t.start()
-    # ポート設定はRenderの環境に合わせてね
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    else:
+        print(f"[{now.strftime('%H:%M')}] スリープ中...", flush=True)
+        time.sleep(600)
